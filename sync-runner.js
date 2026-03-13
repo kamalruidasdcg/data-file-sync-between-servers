@@ -19,18 +19,15 @@ const targetDate = getArg("date"); // e.g., '20260311'
 const sourceFolder = getArg("source"); // Only needed for upload (where to read from)
 
 if (!action || !["download", "upload"].includes(action.toLowerCase())) {
-
     console.error("❌ Error: --action must be 'download' or 'upload'");
     console.log("FOR UPLOAD " + "node sync-runner.js --action=upload --source=LAN --server=LAN --date=20260312");
     console.log("FOR DOWNLOAD " + "node sync-runner.js --action=download --server=NIC --date=20260312");
-
     process.exit(1);
 }
 if (!serverName || !["NIC", "LAN"].includes(serverName.toUpperCase())) {
     console.error("❌ Error: --server must be 'NIC' or 'LAN'");
     console.log("FOR UPLOAD " + "node sync-runner.js --action=upload --source=LAN --server=LAN --date=20260312");
     console.log("FOR DOWNLOAD " + "node sync-runner.js --action=download --server=NIC --date=20260312");
-
     process.exit(1);
 }
 if (!targetDate || targetDate.length !== 8) {
@@ -46,7 +43,7 @@ const mm = targetDate.substring(4, 6);
 const dd = targetDate.substring(6, 8);
 
 const FORMAT_DD_MM_YYYY = `${dd}-${mm}-${yyyy}`; // "11-03-2026"
-const FORMAT_YYYY_MM_DD = `${yyyy}-${mm}-${dd}`; // "11-03-2026"
+const FORMAT_YYYY_MM_DD = `${yyyy}-${mm}-${dd}`; // "2026-03-11"
 const FORMAT_YYYYMMDD = targetDate; // "20260311"
 const FORMAT_YYYYMM = `${yyyy}${mm}`; // "202603"
 
@@ -147,16 +144,38 @@ const performDownload = async (config) => {
             }
         }
 
-        // 5. Payment Advice (LAN SERVER ONLY)
+        // 5. Payment Advice (LAN SERVER ONLY - MODIFIED FOR ALL FOLDERS ON DATE)
         if (isLAN) {
-            console.log("\n-> Downloading Payment Advice...");
-            const payLocal = path.join(localWorkspace, "paymentadvice");
+            console.log(`\n-> Scanning for Payment Advice folders modified on ${FORMAT_YYYY_MM_DD}...`);
+            const payLocalBase = path.join(localWorkspace, "paymentadvice");
+            ensureLocalDir(payLocalBase);
+
             try {
-                ensureLocalDir(payLocal);
-                await ssh.getDirectory(payLocal, `${PARENT_PATH}/uploads/paymentadvice/${FORMAT_YYYYMMDD}`);
-                console.log("   ✅ Success");
+                // Find all directories modified exactly on the target date
+                const findCmd = `find . -mindepth 1 -maxdepth 1 -type d -newermt "${FORMAT_YYYY_MM_DD} 00:00:00" ! -newermt "${FORMAT_YYYY_MM_DD} 23:59:59" -exec basename {} \\;`;
+                const checkFoldersRes = await ssh.execCommand(findCmd, { cwd: `${PARENT_PATH}/uploads/paymentadvice` });
+
+                if (checkFoldersRes.stdout) {
+                    // Convert terminal output to an array of folder names
+                    const folders = checkFoldersRes.stdout.split('\n').map(f => f.trim()).filter(f => f);
+
+                    if (folders.length > 0) {
+                        console.log(`   Found ${folders.length} modified folder(s): ${folders.join(', ')}`);
+                        for (const folder of folders) {
+                            console.log(`   -> Downloading folder: ${folder}...`);
+                            const localFolderDir = path.join(payLocalBase, folder);
+                            ensureLocalDir(localFolderDir);
+                            await ssh.getDirectory(localFolderDir, `${PARENT_PATH}/uploads/paymentadvice/${folder}`);
+                        }
+                        console.log("   ✅ All modified Payment Advice folders downloaded successfully.");
+                    } else {
+                        console.log("   ⚠️ No folders modified on this date. Skipping...");
+                    }
+                } else {
+                    console.log("   ⚠️ No folders modified on this date. Skipping...");
+                }
             } catch (e) {
-                console.log("   ⚠️ Folder not found on server. Skipping...");
+                console.log(`   ⚠️ Error processing Payment Advice: ${e.message}`);
             }
         }
 
@@ -220,7 +239,6 @@ const performUpload = async (config, sourceName) => {
                 const remotePoDir = `${PARENT_PATH}/uploads/po`;
                 const tarName = `${FORMAT_YYYYMMDD}po.tar`;
 
-                // await ssh.execCommand(`mkdir -p ${remotePoDir}`);
                 await ssh.putFile(localTarPath, `${remotePoDir}/${tarName}`);
                 await ssh.execCommand(`tar -xvf ${tarName}`, { cwd: remotePoDir });
                 await ssh.execCommand(`rm ${tarName}`, { cwd: remotePoDir });
@@ -256,17 +274,28 @@ const performUpload = async (config, sourceName) => {
             }
         }
 
-        // 5. Payment Advice (LAN SERVER ONLY)
+        // 5. Payment Advice (LAN SERVER ONLY - MODIFIED FOR MULTIPLE FOLDERS)
         if (isLAN) {
-            const localPayDir = path.join(localWorkspace, "paymentadvice");
-            if (fs.existsSync(localPayDir) && fs.readdirSync(localPayDir).length > 0) {
-                console.log("\n-> Uploading Payment Advice...");
-                const payRemoteDir = `${PARENT_PATH}/uploads/paymentadvice/${FORMAT_YYYYMMDD}`;
-                await ssh.execCommand(`mkdir -p ${payRemoteDir}`);
-                await ssh.putDirectory(localPayDir, payRemoteDir);
-                console.log("   ✅ Success");
+            const localPayBaseDir = path.join(localWorkspace, "paymentadvice");
+            if (fs.existsSync(localPayBaseDir)) {
+                // Get all subfolders that were downloaded
+                const foldersToUpload = fs.readdirSync(localPayBaseDir)
+                    .filter(f => fs.lstatSync(path.join(localPayBaseDir, f)).isDirectory());
+
+                if (foldersToUpload.length > 0) {
+                    console.log(`\n-> Uploading ${foldersToUpload.length} Payment Advice folder(s)...`);
+                    for (const folder of foldersToUpload) {
+                        console.log(`   -> Uploading folder: ${folder}...`);
+                        const payRemoteDir = `${PARENT_PATH}/uploads/paymentadvice/${folder}`;
+                        await ssh.execCommand(`mkdir -p ${payRemoteDir}`);
+                        await ssh.putDirectory(path.join(localPayBaseDir, folder), payRemoteDir);
+                    }
+                    console.log("   ✅ All Payment Advice folders uploaded successfully.");
+                } else {
+                    console.log("\n⚠️ Payment Advice folder empty locally. Skipping...");
+                }
             } else {
-                console.log("\n⚠️ Payment Advice folder empty or missing locally. Skipping...");
+                console.log("\n⚠️ Payment Advice folder missing locally. Skipping...");
             }
         }
 
@@ -284,21 +313,3 @@ if (action.toLowerCase() === "download") {
 } else if (action.toLowerCase() === "upload") {
     performUpload(activeConfig, sourceFolder).catch((err) => console.error(`❌ Upload Failed:`, err.message));
 }
-
-// How to use it:
-
-// Scenario A: Syncing NIC data over to the LAN Server
-
-//     Connect to NIC VPN. Run:
-//     node sync-runner.js --action=download --server=NIC --date=20260311
-
-//     Disconnect VPN, connect to LAN. Run:
-//     node sync-runner.js --action=upload --server=LAN --source=NIC --date=20260311
-
-// Scenario B: Syncing LAN data over to the NIC Server
-
-//     Connect to LAN. Run:
-//     node sync-runner.js --action=download --server=LAN --date=20260311
-
-//     Connect to NIC VPN. Run:
-//     node sync-runner.js --action=upload --server=NIC --source=LAN --date=20260311
