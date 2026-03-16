@@ -57,17 +57,17 @@ const SERVERS = {
         name: "NIC",
         host: "10.212.122.153",
         port: 22,
-        username: "nic_user",
-        password: "nic_password",
-        apiUrl: "http://10.18.7.123:4003/api/v1/sync/sync_unzip",
+        username: "grse",
+        password: "",
+        apiUrl: "https://10.18.1.242:4001/api/v1/sync/sync_unzip",
     },
     LAN: {
         name: "LAN",
-        host: "10.18.7.123",
+        host: "10.18.1.242",
         port: 22,
-        username: "grse",
-        password: "Kolkata@4321",
-        apiUrl: "http://10.18.7.123:4003/api/v1/sync/sync_unzip",
+        username: "root",
+        password: "",
+        apiUrl: "https://obps.grse.in/api/v1/sync/sync_unzip",
     },
 };
 
@@ -95,11 +95,14 @@ const performDownload = async (config) => {
         // 1. Sync Zip (BOTH SERVERS)
         console.log("\n-> Downloading Database Sync Zip...");
         try {
-            await ssh.getFile(path.join(localWorkspace, "sync_data.zip"), `${PARENT_PATH}/sync/zipData/${FORMAT_DD_MM_YYYY}/sync_data.zip`);
+            const zipFileName = `${FORMAT_YYYYMMDD}-${serverName}-sync_data.zip`;
+            console.log("zipFileName", zipFileName)
+           await ssh.getFile(path.join(localWorkspace, zipFileName), `${PARENT_PATH}/sync/zipData/${FORMAT_YYYYMMDD}/${zipFileName}`);
             console.log("   ✅ Success");
         } catch (e) {
             console.log("   ⚠️ Not found on server. Skipping...");
         }
+
 
         // 2. PO Tar (LAN SERVER ONLY)
         if (isLAN) {
@@ -138,7 +141,7 @@ const performDownload = async (config) => {
             try {
                 ensureLocalDir(compLocal);
                 await ssh.getDirectory(compLocal, `${PARENT_PATH}/uploads/compliances/${FORMAT_YYYYMM}/${dd}`);
-                console.log("   ✅ Success");
+                console.log("   ✅ Sync data zip download successfully");
             } catch (e) {
                 console.log("   ⚠️ Folder not found on server. Skipping...");
             }
@@ -212,12 +215,15 @@ const performUpload = async (config, sourceName) => {
 
     try {
         // 1. Database Sync Zip (BOTH SERVERS)
-        const localSyncZip = path.join(localWorkspace, "sync_data.zip");
+        const zipFileName = `${FORMAT_YYYYMMDD}-${sourceName}-sync_data.zip`;
+        console.log("zipFileName", zipFileName);
+        
+        const localSyncZip = path.join(localWorkspace, zipFileName);
         if (fs.existsSync(localSyncZip)) {
             console.log("\n-> Uploading Database Sync Zip...");
-            const remoteZipDir = `${PARENT_PATH}/sync/otherServerData/Data/${FORMAT_DD_MM_YYYY}`;
+            const remoteZipDir = `${PARENT_PATH}/sync/otherServerData/Data/${FORMAT_YYYYMMDD}`;
             await ssh.execCommand(`mkdir -p ${remoteZipDir}`);
-            await ssh.putFile(localSyncZip, `${remoteZipDir}/sync_data.zip`);
+            await ssh.putFile(localSyncZip, `${remoteZipDir}/${zipFileName}`);
             console.log("   ✅ Success");
 
             console.log(`-> Triggering ${config.name} Database Ingestion API...`);
@@ -313,3 +319,6 @@ if (action.toLowerCase() === "download") {
 } else if (action.toLowerCase() === "upload") {
     performUpload(activeConfig, sourceFolder).catch((err) => console.error(`❌ Upload Failed:`, err.message));
 }
+
+// node sync-runner.js --action=download --server=LAN --date=20260316
+// node sync-runner.js --action=upload --source=LAN --server=LAN --date=20260313
