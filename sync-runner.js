@@ -26,7 +26,7 @@ if (!action || !["download", "upload"].includes(action.toLowerCase())) {
 }
 if (!serverName || !["NIC", "LAN"].includes(serverName.toUpperCase())) {
     console.error("❌ Error: --server must be 'NIC' or 'LAN'");
-    console.log("FOR UPLOAD " + "node sync-runner.js --action=upload --source=LAN --server=LAN --date=20260312");
+    console.log("FOR UPLOAD " + "node sync-runner.js --action=upload --source=LAN --server=NIC --date=20260312");
     console.log("FOR DOWNLOAD " + "node sync-runner.js --action=download --server=NIC --date=20260312");
     process.exit(1);
 }
@@ -97,7 +97,7 @@ const performDownload = async (config) => {
         try {
             const zipFileName = `${FORMAT_YYYYMMDD}-${serverName}-sync_data.zip`;
             console.log("zipFileName", zipFileName)
-           await ssh.getFile(path.join(localWorkspace, zipFileName), `${PARENT_PATH}/sync/zipData/${FORMAT_YYYYMMDD}/${zipFileName}`);
+            await ssh.getFile(path.join(localWorkspace, zipFileName), `${PARENT_PATH}/sync/zipData/${FORMAT_YYYYMMDD}/${zipFileName}`);
             console.log("   ✅ Success");
         } catch (e) {
             console.log("   ⚠️ Not found on server. Skipping...");
@@ -182,6 +182,22 @@ const performDownload = async (config) => {
             }
         }
 
+
+        // 6. icgrn (LAN SERVER ONLY - MODIFIED FOR ALL FOLDERS ON DATE)
+        if (isLAN) {
+
+            console.log("\n-> Downloading General Uploads...");
+            const uploadsLocal = path.join(localWorkspace, "icgrnremarks", FORMAT_YYYYMMDD);
+            try {
+                ensureLocalDir(uploadsLocal);
+                await ssh.getDirectory(uploadsLocal, `${PARENT_PATH}/uploads/icgrnremarks/${FORMAT_YYYYMMDD}`);
+                console.log("   ✅ Payment advice Success");
+            } catch (e) {
+                console.log("   ⚠️ Folder not found on server. Skipping...");
+            }
+
+        }
+
         console.log(`\n🎉 ${config.name} DOWNLOADS COMPLETE! Data saved to: SYNC_WORKSPACE/DOWNLOADED_FROM_${config.name}_${FORMAT_YYYYMMDD}`);
     } finally {
         ssh.dispose();
@@ -217,7 +233,7 @@ const performUpload = async (config, sourceName) => {
         // 1. Database Sync Zip (BOTH SERVERS)
         const zipFileName = `${FORMAT_YYYYMMDD}-${sourceName}-sync_data.zip`;
         console.log("zipFileName", zipFileName);
-        
+
         const localSyncZip = path.join(localWorkspace, zipFileName);
         if (fs.existsSync(localSyncZip)) {
             console.log("\n-> Uploading Database Sync Zip...");
@@ -237,8 +253,8 @@ const performUpload = async (config, sourceName) => {
             console.log("\n⚠️ sync_data.zip not found locally. Skipping upload & API trigger...");
         }
 
-        // 2. Upload and Untar POs (LAN SERVER ONLY)
-        if (isLAN) {
+        // 2. Upload and Untar POs (NIC SERVER ONLY)
+        if (isNIC) {
             const localTarPath = path.join(localWorkspace, `${FORMAT_YYYYMMDD}po.tar`);
             if (fs.existsSync(localTarPath)) {
                 console.log("\n-> Uploading and Extracting POs...");
@@ -266,8 +282,8 @@ const performUpload = async (config, sourceName) => {
             console.log("\n⚠️ General uploads folder empty or missing locally. Skipping...");
         }
 
-        // 4. Compliances (NIC SERVER ONLY)
-        if (isNIC) {
+        // 4. Compliances (LAN SERVER ONLY)
+        if (isLAN) {
             const localCompDir = path.join(localWorkspace, "compliances");
             if (fs.existsSync(localCompDir) && fs.readdirSync(localCompDir).length > 0) {
                 console.log("\n-> Uploading Compliances...");
@@ -281,7 +297,7 @@ const performUpload = async (config, sourceName) => {
         }
 
         // 5. Payment Advice (LAN SERVER ONLY - MODIFIED FOR MULTIPLE FOLDERS)
-        if (isLAN) {
+        if (isNIC) {
             const localPayBaseDir = path.join(localWorkspace, "paymentadvice");
             if (fs.existsSync(localPayBaseDir)) {
                 // Get all subfolders that were downloaded
@@ -304,6 +320,21 @@ const performUpload = async (config, sourceName) => {
                 console.log("\n⚠️ Payment Advice folder missing locally. Skipping...");
             }
         }
+
+        // 6. Payment advice (NIC only)
+        if (isNIC) {
+            const localUploadsDir = path.join(localWorkspace, "paymentadvice", FORMAT_YYYYMMDD);
+            if (fs.existsSync(localUploadsDir) && fs.readdirSync(localUploadsDir).length > 0) {
+                console.log("\n-> Uploading Paymentadvice Uploads...");
+                const remoteUploadsDir = `${PARENT_PATH}/uploads/paymentadvice/${FORMAT_YYYYMMDD}`;
+                await ssh.execCommand(`mkdir -p ${remoteUploadsDir}`);
+                await ssh.putDirectory(localUploadsDir, remoteUploadsDir);
+                console.log("   ✅ Paymentadvice successfully uploaded");
+            } else {
+                console.log("\n⚠️ General paymentadvice folder empty or missing locally. Skipping...");
+            }
+        }
+
 
         console.log(`\n🎉 UPLOADS TO ${config.name} COMPLETE!`);
     } finally {
