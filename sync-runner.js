@@ -59,7 +59,7 @@ const SERVERS = {
         port: 22,
         username: "grse",
         password: "",
-        apiUrl: "https://10.18.1.242:4001/api/v1/sync/sync_unzip",
+        apiUrl: "https://obps.grse.in/api/v1/sync/sync_unzip",
     },
     LAN: {
         name: "LAN",
@@ -67,7 +67,7 @@ const SERVERS = {
         port: 22,
         username: "root",
         password: "",
-        apiUrl: "https://obps.grse.in/api/v1/sync/sync_unzip",
+        apiUrl: "http://10.18.1.242:4001/api/v1/sync/sync_unzip",
     },
 };
 
@@ -186,14 +186,14 @@ const performDownload = async (config) => {
         // 6. icgrn (LAN SERVER ONLY - MODIFIED FOR ALL FOLDERS ON DATE)
         if (isLAN) {
 
-            console.log("\n-> Downloading General Uploads...");
+            console.log("\n-> Downloading ICGRN remarks Uploads...");
             const uploadsLocal = path.join(localWorkspace, "icgrnremarks", FORMAT_YYYYMMDD);
             try {
                 ensureLocalDir(uploadsLocal);
                 await ssh.getDirectory(uploadsLocal, `${PARENT_PATH}/uploads/icgrnremarks/${FORMAT_YYYYMMDD}`);
-                console.log("   ✅ Payment advice Success");
+                console.log("   ✅ ICGRN Remarks Success");
             } catch (e) {
-                console.log("   ⚠️ Folder not found on server. Skipping...");
+                console.log("   ⚠️ icgrnremarks folder not found on server. Skipping...");
             }
 
         }
@@ -321,17 +321,17 @@ const performUpload = async (config, sourceName) => {
             }
         }
 
-        // 6. Payment advice (NIC only)
+        // 6. ICGRN rmarks advice (NIC only)
         if (isNIC) {
-            const localUploadsDir = path.join(localWorkspace, "paymentadvice", FORMAT_YYYYMMDD);
+            const localUploadsDir = path.join(localWorkspace, "icgrnremarks", FORMAT_YYYYMMDD);
             if (fs.existsSync(localUploadsDir) && fs.readdirSync(localUploadsDir).length > 0) {
-                console.log("\n-> Uploading Paymentadvice Uploads...");
-                const remoteUploadsDir = `${PARENT_PATH}/uploads/paymentadvice/${FORMAT_YYYYMMDD}`;
+                console.log("\n-> Uploading Icgrnremarks Uploads...");
+                const remoteUploadsDir = `${PARENT_PATH}/uploads/icgrnremarks/${FORMAT_YYYYMMDD}`;
                 await ssh.execCommand(`mkdir -p ${remoteUploadsDir}`);
                 await ssh.putDirectory(localUploadsDir, remoteUploadsDir);
-                console.log("   ✅ Paymentadvice successfully uploaded");
+                console.log("   ✅ ICGRN remarks successfully uploaded");
             } else {
-                console.log("\n⚠️ General paymentadvice folder empty or missing locally. Skipping...");
+                console.log("\n⚠️ ICGRN remarks folder empty or missing locally. Skipping...");
             }
         }
 
