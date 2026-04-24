@@ -57,15 +57,15 @@ const SERVERS = {
         name: "NIC",
         host: "10.212.122.153",
         port: 22,
-        username: "",
+        username: "grse",
         password: "", // <-- Make sure to put your password here for sudo -S to work
         apiUrl: "https://obps.grse.in/api/v1/sync/sync_unzip",
     },
     LAN: {
         name: "LAN",
-        host: "10.18.7.123",
+        host: "10.18.1.242",
         port: 22,
-        username: "",
+        username: "root",
         password: "",
         apiUrl: "http://10.18.1.242:4001/api/v1/sync/sync_unzip",
     },
@@ -168,7 +168,7 @@ const performDownload = async (config) => {
         // 4. Compliances (NIC SERVER ONLY)
         if (isNIC) {
             console.log("\n-> Downloading Compliances...");
-            const compLocal = path.join(localWorkspace, "compliances");
+            const compLocal = path.join(localWorkspace, "compliances", FORMAT_YYYYMM, dd);
             try {
                 ensureLocalDir(compLocal);
                 await ssh.getDirectory(compLocal, `${PARENT_PATH}/uploads/compliances/${FORMAT_YYYYMM}/${dd}`);
